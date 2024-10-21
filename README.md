@@ -11,6 +11,7 @@ Anime Saver is a browser extension designed to help anime enthusiasts track thei
 **Supported Sites**
 - Full functionality: Gogoanime, xsanime, Any anime site with 'episode-number' in the URL
 - Limited functionality: 9anime (manual saving only), cant get next episode.
+  
 **How It Works**
 - Anime Saver uses three main methods to extract anime information:
   
