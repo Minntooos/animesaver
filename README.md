@@ -165,7 +165,9 @@ Future updates will include:
   
 **Privacy**
 - Anime Saver operates entirely client-side and does not send any data to external servers.
-Contributing
+  
+**Contributing**
 - Contributions are welcome! Please feel free to submit a Pull Request.
-Support
+- 
+**Support**
 - If you encounter any issues or have any questions, please open an issue on the GitHub repository.
