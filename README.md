@@ -162,7 +162,8 @@ The extension is currently under active development.
 Future updates will include:
 - Improved support for sites without 'episode-number' in the URL
 - Enhanced functionality for partially supported sites
-- Privacy
+  
+**Privacy**
 - Anime Saver operates entirely client-side and does not send any data to external servers.
 Contributing
 - Contributions are welcome! Please feel free to submit a Pull Request.
