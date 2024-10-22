@@ -168,6 +168,6 @@ Future updates will include:
   
 **Contributing**
 - Contributions are welcome! Please feel free to submit a Pull Request.
-- 
+  
 **Support**
 - If you encounter any issues or have any questions, please open an issue on the GitHub repository.
