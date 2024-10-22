@@ -148,7 +148,7 @@ The extension icon should appear in your browser's toolbar.
 Usage
 1. Visit a supported anime streaming site.
 2. Play an episode of an anime.
-3. The extension will automatically save your progress (on fully supported sites).
+3. Right click -> Save To Anime Group Or The extension will automatically save your progress by clicking next episode (on fully supported sites eg. gogoanime).
 4. Click on the extension icon to view your saved anime and manage your list.
 
 **Filters**
