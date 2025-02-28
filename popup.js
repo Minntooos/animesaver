@@ -20,8 +20,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const settingsButton = document.getElementById('settings');
     const settingsModal = document.getElementById('settingsModal');
     const saveSettingsButton = document.getElementById('saveSettings');
-    const filterSelect = document.getElementById('filterSelect');
-    filterSelect.addEventListener('change', applyFilter);
+    const filterButtons = document.querySelectorAll('.filter-button');
+    filterButtons.forEach(button => {
+        button.addEventListener('click', handleFilterButtonClick);
+    });
+    const guideButton = document.getElementById('guideButton');
+    guideButton.addEventListener('click', openGuideModal);
 
     refreshButton.addEventListener('click', () => {
         refreshAnimeData();
@@ -59,6 +63,11 @@ document.addEventListener('DOMContentLoaded', function () {
             closeModal('settingsModal');
         }
     });
+    const closeButton = document.getElementById('close-button');
+    closeButton.addEventListener('click', () => {
+        closeModal('settingsModal');
+    }); 
+
 
     saveSettingsButton.addEventListener('click', saveSettings);
 
@@ -70,9 +79,84 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
+// New function to handle filter button clicks
+function handleFilterButtonClick(event) {
+    // Remove active class from all filter buttons
+    document.querySelectorAll('.filter-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Add active class to clicked button
+    event.target.classList.add('active');
+    
+    // Get the filter value from the data-filter attribute
+    const filterValue = event.target.dataset.filter;
+    
+    // Apply the filter
+    const currentLetter = document.querySelector('#alphabetList button.active').dataset.letter;
+    loadAnimeGroups(currentLetter, filterValue).then(() => {
+        updateAnimeCount();
+    });
+}
+
 function openSettingsModal() {
     const modal = document.getElementById('settingsModal');
     modal.style.display = 'block';
+}
+function openGuideModal() {
+    let modal = document.getElementById('guideModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'guideModal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <h2>Anime Saver Guide</h2>
+                <p>Welcome to Anime Saver! Here's a quick guide on how to use the extension:</p>
+                <ol>
+                    <li>The extension automatically saves your progress when watching anime on Gogoanime.</li>
+                    <li>Automatic saving occurs when you click the "Next Episode" button on Gogoanime.</li>
+                    <li>For the last episode of a series on Gogoanime, right-click and select "Save to Anime Group" to save it manually.</li>
+                    <li>You can also save from other registered sites like xsanime and 9anime, even if the episode number and title aren't in the URL.</li>
+                    <li>The extension can save from any site that has the episode number at the end of the URL (e.g., /episode-5).</li>
+                    <li>Each time you save, a .json file containing your data will be created as a backup.</li>
+                    <li>This backup file can be used to restore your data if the storage is accidentally cleared.</li>
+                    <li>Use the search bar to find specific anime titles.</li>
+                    <li>Filter episodes using the dropdown menu:
+                        <ul style="margin-left: 20px; margin-top: 10px;">
+                            <li><strong>All Episodes:</strong> Shows all saved episodes.</li>
+                            <li><strong>Watch Next:</strong> Filters animes with more than one episode available to watch next. This is useful for continuing series you're actively watching.</li>
+                            <li><strong>New Episode:</strong> Shows animes with only one new episode available. This helps you quickly identify series with recent updates.</li>
+                        </ul>
+                        <p style="margin-top: 10px;">These filters help you organize your watching experience and prioritize which anime to watch next.</p>
+                    </li>
+                    <li>Click on an anime card to resume watching from where you left off.</li>
+                    <li>Use the alphabet buttons on the left to filter anime by their first letter.</li>
+                    <li>Adjust settings by clicking the gear icon in the top right corner.</li>
+                    <li>On Gogoanime, right-click on an episode to see the "Check Last Episode" option, which shows the last episode you watched.</li>
+                    <li>The extension checks for new episodes at regular intervals. You can also manually check by clicking the refresh button.</li>
+                </ol>
+                <button id="closeGuideButton">Close</button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    modal.style.display = 'block';
+
+    const closeButton = document.getElementById('closeGuideButton');
+    closeButton.addEventListener('click', closeGuideModal);
+
+    window.addEventListener('click', function(event) {
+        if (event.target === modal) {
+            closeGuideModal();
+        }
+    });
+}
+
+function closeGuideModal() {
+    const modal = document.getElementById('guideModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
 }
 
 function closeModal(modalId) {
@@ -215,6 +299,13 @@ function loadAlphabetButtons() {
 
 function shouldDisplayEpisode(episode, filter) {
     console.log('Filter:', filter, 'Episode:', episode);
+    
+    // First check if it's a last episode from aniwatchtv.to
+    if (episode.url && episode.url.includes('aniwatchtv.to') && episode.isLastEpisode) {
+        // Last episodes should never show in watchNext or newEpisode filters
+        return filter === 'all';
+    }
+
     switch (filter) {
         case 'watchNext':
             return episode.nextEpisodeAvailable === true;
@@ -279,7 +370,10 @@ function loadAnimeGroups(filterLetter = 'All', filter = 'all') {
 
             // Wait for all cards to be processed before resolving
             Promise.all(cardPromises).then(() => {
+                updateAnimeCount();
+
                 resolveLoadGroups();
+                
             });
         });
     });
@@ -287,6 +381,17 @@ function loadAnimeGroups(filterLetter = 'All', filter = 'all') {
 
 function extractAnimeName(title, url) {
     let animeName = '';
+    if (url && url.includes('aniwatchtv.to')) {
+        const urlParts = url.split('/');
+        const lastPart = urlParts[urlParts.length - 1];
+        animeName = lastPart
+            .split('?')[0]  // Remove query parameters
+            .replace(/-\d+$/, '')  // Remove the ID number at the end
+            .replace(/[0-9]/g, '')  // Remove any remaining numbers
+            .replace(/-+/g, ' ')  // Replace hyphens with spaces
+            .trim();  // Clean up extra spaces
+        return animeName;
+    }
 
     // First, try to extract from the URL
     if (url) {
@@ -312,7 +417,17 @@ function extractAnimeName(title, url) {
 
     return animeName || 'unknown-anime';
 }
+
 function generateEpisodeUrl(baseUrl, episodeNumber) {
+        // Special handling for aniwatchtv.to URLs
+        if (baseUrl.includes('aniwatchtv.to')) {
+            // Extract the base anime URL without the episode parameter
+            const baseAnimeUrl = baseUrl.split('?')[0];
+            
+            // For aniwatchtv.to, we can't predict the episode ID parameter
+            // So we'll return a special URL format that our availability checker will recognize
+            return `${baseAnimeUrl}?ep=next&epnum=${episodeNumber}`;
+        }
     const encodedArabic = '%d8%ad%d9%84%d9%82%d8%a9';
     if (baseUrl.includes(encodedArabic)) {
         // Handle URL-encoded Arabic format
@@ -334,29 +449,59 @@ function generateEpisodeUrl(baseUrl, episodeNumber) {
         );
     }
 }
+
 function createCard(groupName, episode, resolveCard) {
+    
     const card = document.createElement('div');
     card.classList.add('anime-card');
-    
+    card.dataset.episode = JSON.stringify(episode);
+
     // Get the current card size from body class
     const cardSize = document.body.classList.contains('small-cards') ? 'small' :
                      document.body.classList.contains('large-cards') ? 'large' : 'medium';
     card.classList.add(`${cardSize}-card`);
 
     // Extract anime name from the episode title or URL
-    let animeName = extractAnimeName(episode.title, episode.url);
-    
-    // Create cover image
-    const coverImage = document.createElement('img');
-    coverImage.dataset.src = `https://gogocdn.net/cover/${animeName}.png`;
-    coverImage.alt = animeName;
-    coverImage.classList.add('anime-card-image');
-    coverImage.onerror = function() {
+    let animeName;
+    if (episode.url.includes('aniwatchtv.to')) {
+        // For aniwatchtv.to, use the group name directly
+        animeName = groupName.replace(/-/g, ' ').trim();
+    } else {
+        animeName = extractAnimeName(episode.title, episode.url);
+    }
+// Create cover image
+const coverImage = document.createElement('img');
+
+// Use the stored image URL if available, otherwise fall back to the generated URL
+coverImage.dataset.src = episode.coverImageUrl || `https://gogocdn.net/cover/${animeName}.png`;
+coverImage.alt = animeName;
+coverImage.classList.add('anime-card-image');
+coverImage.onerror = function() {
+    // If the stored image URL fails, try the fallback
+    if (episode.coverImageUrl && this.src !== `https://gogocdn.net/cover/${animeName}.png`) {
+        console.log(`Stored image failed for: ${animeName}, trying fallback`);
+        this.src = `https://gogocdn.net/cover/${animeName}.png`;
+    } else {
+        // If all fails, use a transparent placeholder
         this.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
         this.alt = 'Placeholder';
-        console.log(`Failed to load image for: ${animeName}`);
-    };
+        console.log(`Failed to load any image for: ${animeName}`);
+    }
+};
     card.appendChild(coverImage);
+  // Implement lazy loading
+  const observer = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const img = entry.target;
+            img.src = img.dataset.src;
+            img.classList.add('loaded');
+            observer.unobserve(img);
+        }
+    });
+}, { rootMargin: '0px 0px 50px 0px' });
+
+observer.observe(coverImage);
 
     const cardContent = document.createElement('div');
     cardContent.classList.add('anime-card-content');
@@ -402,7 +547,15 @@ function createCard(groupName, episode, resolveCard) {
     // Add link to previous episode
     const prevEpisodeNumber = parseInt(episode.episode) - 1;
     if (prevEpisodeNumber > 0) {
-        const prevEpisodeUrl = generateEpisodeUrl(episode.url, prevEpisodeNumber);
+        let prevEpisodeUrl;
+    
+        // Special handling for aniwatchtv.to URLs
+        if (episode.url.includes('aniwatchtv.to')) {
+            const baseAnimeUrl = episode.url.split('?')[0]; 
+            prevEpisodeUrl = `${baseAnimeUrl}?epnum=${prevEpisodeNumber}`;
+        } else {
+            prevEpisodeUrl = generateEpisodeUrl(episode.url, prevEpisodeNumber);
+        }
         const prevEpisodeLink = document.createElement('a');
         prevEpisodeLink.href = prevEpisodeUrl;
         prevEpisodeLink.textContent = 'Previous';
@@ -433,11 +586,29 @@ function createCard(groupName, episode, resolveCard) {
         img.style.height = 'auto';
     }
 
+    // Get the current filter value
+    const currentFilter = document.querySelector('.filter-button.active')?.dataset.filter || 'all';
+    updateCardVisibility(card, episode, currentFilter);
+
     // Check if next episode and episode after next are available
     const nextEpisodeNumber = parseInt(episode.episode) + 1;
     const episodeAfterNextNumber = nextEpisodeNumber + 1;
-    const nextEpisodeUrl = generateEpisodeUrl(episode.url, nextEpisodeNumber);
-    const episodeAfterNextUrl = generateEpisodeUrl(episode.url, episodeAfterNextNumber);
+    let nextEpisodeUrl, episodeAfterNextUrl;
+
+    // Special handling for aniwatchtv.to URLs
+    if (episode.url.includes('aniwatchtv.to')) {
+          // Don't create next episode link if this is marked as the last episode
+          if (episode.isLastEpisode) {
+            resolveCard();
+            return card;
+        }
+        const baseAnimeUrl = episode.url.split('?')[0];
+        nextEpisodeUrl = `${baseAnimeUrl}?epnum=${nextEpisodeNumber}`;
+        episodeAfterNextUrl = `${baseAnimeUrl}?epnum=${episodeAfterNextNumber}`;
+    } else {
+        nextEpisodeUrl = generateEpisodeUrl(episode.url, nextEpisodeNumber);
+        episodeAfterNextUrl = generateEpisodeUrl(episode.url, episodeAfterNextNumber);
+    }
     const availabilityKey = `nextEpisodeAvailable_${groupName}_${episode.episode}`;
     const afterNextAvailabilityKey = `episodeAfterNextAvailable_${groupName}_${episode.episode}`;
 
@@ -453,39 +624,40 @@ function createCard(groupName, episode, resolveCard) {
                         [availabilityKey]: { isAvailable: isNextAvailable, lastChecked: Date.now() },
                         [afterNextAvailabilityKey]: { isAvailable: isAfterNextAvailable, lastChecked: Date.now() }
                     });
+
                     updateNextEpisodeLink(isNextAvailable, nextEpisodeUrl, nextPlaceholder);
-                    updateCardVisibility(card, { 
+                    // Update the episode object with availability info
+                    const updatedEpisode = { 
                         ...episode, 
                         nextEpisodeAvailable: isNextAvailable,
                         episodeAfterNextAvailable: isAfterNextAvailable
-                    }, filterSelect.value);
+                    };
+                    
+                    // Update the card's dataset with the updated episode
+                    card.dataset.episode = JSON.stringify(updatedEpisode);
+                    
+                    updateCardVisibility(card, updatedEpisode, currentFilter);
                     resolveCard();
                 });
             });
         } else {
             updateNextEpisodeLink(nextIsAvailable, nextEpisodeUrl, nextPlaceholder);
-            updateCardVisibility(card, { 
+            // Update the episode object with availability info
+            const updatedEpisode = { 
                 ...episode, 
                 nextEpisodeAvailable: nextIsAvailable,
                 episodeAfterNextAvailable: afterNextIsAvailable
-            }, filterSelect.value);
+            };
+            
+            // Update the card's dataset with the updated episode
+            card.dataset.episode = JSON.stringify(updatedEpisode);
+            
+            updateCardVisibility(card, updatedEpisode, currentFilter);
             resolveCard();
         }
     });
 
-    // Implement lazy loading
-    const observer = new IntersectionObserver((entries, observer) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                const img = entry.target;
-                img.src = img.dataset.src;
-                img.classList.add('loaded');
-                observer.unobserve(img);
-            }
-        });
-    }, { rootMargin: '0px 0px 50px 0px' });
-
-    observer.observe(coverImage);
+  
 
     return card;
 }
@@ -499,12 +671,41 @@ function updateCardVisibility(card, episode, currentFilter) {
 }
 
 function updateAnimeCount() {
-    const visibleCards = document.querySelectorAll('.anime-card:not([style*="display: none"])').length;
-    document.getElementById('animeCountValue').textContent = `Anime Count: ${visibleCards}`;
+    // Get counts for each filter type
+    const allCount = document.querySelectorAll('.anime-card').length;
+    
+    // Get watch next count
+    const watchNextCount = Array.from(document.querySelectorAll('.anime-card')).filter(card => {
+        if (!card.dataset.episode) return false;
+        try {
+            const episode = JSON.parse(card.dataset.episode);
+            return shouldDisplayEpisode(episode, 'watchNext');
+        } catch (error) {
+            console.error('Error parsing episode data:', error, card.dataset.episode);
+            return false;
+        }
+    }).length;
+    
+    // Get new episode count
+    const newEpisodeCount = Array.from(document.querySelectorAll('.anime-card')).filter(card => {
+        if (!card.dataset.episode) return false;
+        try {
+            const episode = JSON.parse(card.dataset.episode);
+            return shouldDisplayEpisode(episode, 'newEpisode');
+        } catch (error) {
+            console.error('Error parsing episode data:', error, card.dataset.episode);
+            return false;
+        }
+    }).length;
+    
+    // Update badges
+    document.querySelector('#filterAll .count-badge').textContent = allCount;
+    document.querySelector('#filterWatchNext .count-badge').textContent = watchNextCount;
+    document.querySelector('#filterNewEpisode .count-badge').textContent = newEpisodeCount;
 }
 
 function applyFilter() {
-    const filterValue = document.getElementById('filterSelect').value;
+    const filterValue = document.querySelector('.filter-button.active').dataset.filter;
     const currentLetter = document.querySelector('#alphabetList button.active').dataset.letter;
     console.log('Applying filter:', filterValue);
     
@@ -513,7 +714,13 @@ function applyFilter() {
     });
 }
 
+
 function updateNextEpisodeLink(isAvailable, nextEpisodeUrl, placeholder) {
+        // Don't create next episode link if we're on aniwatchtv.to and it's the last episode
+        if (nextEpisodeUrl && nextEpisodeUrl.includes('aniwatchtv.to') && 
+        placeholder.parentElement.querySelector('.anime-card')?.dataset.episode?.isLastEpisode) {
+        return;
+    }
     if (isAvailable) {
         const nextEpisodeLink = document.createElement('a');
         nextEpisodeLink.href = nextEpisodeUrl;
@@ -635,7 +842,12 @@ function handleFilter(letter) {
     // Add 'active' class to clicked button
     document.querySelector(`#alphabetList button[data-letter="${letter}"]`).classList.add('active');
 
-    loadAnimeGroups(letter);
+    // Get the current filter from active filter button
+    const currentFilter = document.querySelector('.filter-button.active').dataset.filter;
+    
+    loadAnimeGroups(letter, currentFilter).then(() => {
+        updateAnimeCount();
+    });
 }
 
 function refreshAnimeData() {
@@ -697,8 +909,13 @@ function refreshAnimeData() {
         }
         Promise.all(refreshPromises).then(() => {
             console.log('All next episode availabilities have been checked and updated.');
-            loadAnimeGroups(); // Reload the anime groups to reflect the updates
-            document.querySelector('.loading-overlay').classList.remove('active');        });
+            const currentFilter = document.querySelector('.filter-button.active').dataset.filter;
+            const currentLetter = document.querySelector('#alphabetList button.active').dataset.letter;
+            loadAnimeGroups(currentLetter, currentFilter).then(() => {
+                updateAnimeCount();
+                document.querySelector('.loading-overlay').classList.remove('active');
+            });
+        });
     });
 }
 
@@ -720,15 +937,57 @@ function splitIntoChunks(array, chunkSize = 100) {
 }
 
 function checkEpisodeAvailability(url, callback) {
-    fetch(url, { method: 'HEAD' })
-        .then(response => {
-            callback(response.ok);
-        })
-        .catch(() => {
+    // Use full GET request instead of HEAD to detect redirects
+    if (url.includes('aniwatchtv.to')) {
+        callback(false);
+        return;
+    }
+    fetch(url, { 
+        method: 'GET',
+        redirect: 'follow' // Explicitly follow redirects
+    })
+    .then(response => {
+        if (!response.ok) {
             callback(false);
+            return;
+        }
+        
+        // Check if we were redirected to a different path
+        const responseUrl = new URL(response.url);
+        const originalUrl = new URL(url);
+        
+        // Consider episode available only if:
+        // 1. Response is OK (200-299)
+        // 2. We're still on the same path or a valid episode path
+        // 3. Not redirected to home page, root or error page
+        const isValidPath = responseUrl.pathname.includes('-episode-') || 
+                           responseUrl.pathname.includes('حلقة-');
+        const isSamePath = responseUrl.pathname === originalUrl.pathname;
+        const isHomePage = responseUrl.pathname === '/' || 
+                          responseUrl.pathname === '/index.html' ||
+                          responseUrl.pathname.endsWith('/404') ||
+                          responseUrl.pathname.endsWith('/error');
+        
+        const isAvailable = response.ok && (isSamePath || isValidPath) && !isHomePage;
+        
+        // For debugging
+        console.log('Episode availability check:', {
+            originalUrl: url,
+            finalUrl: response.url,
+            redirected: response.redirected,
+            isValidPath,
+            isSamePath,
+            isHomePage,
+            isAvailable
         });
+        
+        callback(isAvailable);
+    })
+    .catch((error) => {
+        console.error('Error checking episode availability:', error);
+        callback(false);
+    });
 }
-
 function handleSearch() {
     const searchTerm = document.getElementById('searchInput').value.trim().toLowerCase();
     chrome.storage.sync.get(null, function(data) {

@@ -3,7 +3,31 @@ export default function extractFromDom(url, domContent) {
 
     let animeTitle = null;
     let episodeNumber = null;
-
+ // Check for AniWatchTV.to
+ if (url.includes('aniwatchtv.to')) {
+    // Extract episode number from the active episode selector
+    const activeEpMatch = domContent.match(/<a[^>]*class="[^"]*ep-item[^"]*active[^"]*"[^>]*data-number="([^"]*)"[^>]*/);
+    if (activeEpMatch) {
+        episodeNumber = activeEpMatch[1];
+        console.log('AniWatchTV episode number:', episodeNumber);
+    }
+    
+    // Extract anime title from the film name heading
+    const titleMatch = domContent.match(/<h2 class="film-name">\s*<a[^>]*title="([^"]+)"/);
+    if (titleMatch) {
+        animeTitle = titleMatch[1];
+        // Remove any numeric ID at the end if present
+        animeTitle = animeTitle.replace(/\s+\d+$/, '');
+        console.log('AniWatchTV anime title:', animeTitle);
+    }
+    
+    if (animeTitle || episodeNumber) {
+        return {
+            animeTitle: animeTitle,
+            episodeNumber: episodeNumber
+        };
+    }
+}
     // Try to extract from the episodes section first
     const episodesSectionMatch = domContent.match(/<div[^>]*class="[^"]*block_area[^"]*block_area-episodes[^"]*"[^>]*>([\s\S]*?)<\/div>/);
     if (episodesSectionMatch) {

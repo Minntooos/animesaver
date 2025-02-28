@@ -29,6 +29,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     <div class="nav-controls">
       <button id="refresh" title="Refresh">&#x21bb;</button>
       <button id="loadFromFile" title="Load from File">&#x1f4be;</button>
+      <button id="guideButton" title="Guide">?</button>
       <button id="settings" title="Settings">&#x2699;</button>
       <input type="file" id="fileInput" accept=".json" style="display: none;">
     </div>
@@ -51,15 +52,11 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
         <input type="text" id="searchInput" placeholder="Search Anime">
       </div>
       <div class="filter-options">
-        <select id="filterSelect">
-          <option value="all">All Episodes</option>
-          <option value="watchNext">Watch Next</option>
-          <option value="newEpisode">New Episode</option>
-        </select>
-        
-      </div>
-      <div class="anime-count">
-         <span id="animeCountValue">0</span>
+        <div class="filter-buttons">
+          <button id="filterAll" class="filter-button active" data-filter="all">All Episodes <span class="count-badge">0</span></button>
+          <button id="filterWatchNext" class="filter-button" data-filter="watchNext">Watch Next <span class="count-badge">0</span></button>
+          <button id="filterNewEpisode" class="filter-button" data-filter="newEpisode">New Episode <span class="count-badge">0</span></button>
+        </div>
       </div>
       
       <div id="animeCards" class="anime-cards">
@@ -69,7 +66,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
       <!-- Settings Modal -->
 <div id="settingsModal" class="modal">
   <div class="modal-content">
-    <span class="close-button">&times;</span>
+    <span id="close-button" class="close-button">&times;</span>
     <h2>Settings</h2>
     <div class="setting">
       <label>

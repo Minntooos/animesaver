@@ -3,6 +3,9 @@ import { extractEpisodeInfo, removeEpisodeNumber } from './utils.js';
 import extractFromUrl from './extractors/urlExtractor.js';
 import extractFromDom from './extractors/domExtractor.js';
 import customExtractor from './extractors/customExtractor.js';
+import extractImageUrl from './extractors/imageExtractor.js'; // Add this import
+const recentlySavedUrls = new Map(); // URL -> timestamp
+
 console.log("Background script is running");
 
 const saveContextMenuItemId = "saveToAnimeGroup";
@@ -84,7 +87,27 @@ async function saveToAnimeGroup(tabOrUrl, isNextEpisode = false) {
         }
 
         console.log('Attempting to save URL:', url);
+  // Protection against repeated save attempts
+  if (url.includes('aniwatchtv.to')) {
 
+  const now = Date.now();
+  const urlWithoutFragment = url.split('#')[0];
+  if (recentlySavedUrls.has(urlWithoutFragment)) {
+      const lastSaveTime = recentlySavedUrls.get(urlWithoutFragment);
+      if (now - lastSaveTime < 10000) { // 10-second cooldown
+          console.log('Recently attempted to save this URL. Skipping to prevent loop.');
+          return;
+      }
+  }
+  recentlySavedUrls.set(urlWithoutFragment, now);
+  
+  // Clean up old entries from the map to prevent memory leaks
+  for (const [savedUrl, timestamp] of recentlySavedUrls.entries()) {
+      if (now - timestamp > 60000) { // Remove entries older than 1 minute
+          recentlySavedUrls.delete(savedUrl);
+      }
+  }
+}
         let animeTitle, episodeNumber;
 
         // Try URL extractor first
@@ -104,9 +127,77 @@ async function saveToAnimeGroup(tabOrUrl, isNextEpisode = false) {
                 if (response && response.animeTitle && response.episodeNumber) {
                     animeTitle = response.animeTitle || animeTitle;
                     episodeNumber = response.episodeNumber;
-                } else {
-                    throw new Error('Failed to extract anime title or episode number from content script.');
-                }
+                } else if (tab.url.includes('aniwatchtv.to')) {
+                   // For aniwatchtv.to, first try to get episode info from content script
+    console.log('URL extractor failed to get episode number, trying content script...');
+    try {
+        const response = await chrome.tabs.sendMessage(tab.id, { action: "getEpisodeInfo" });
+        console.log('Content script response:', response);
+        if (response && response.episodeNumber) {
+            // Get the clean anime title from URL extractor
+            const urlExtracted = extractFromUrl(tab.url);
+            return {
+                animeTitle: urlExtracted.animeTitle,
+                episodeNumber: response.episodeNumber,
+                url: tab.url
+            };
+        }
+    } catch (error) {
+        console.error('Error getting episode info from content script:', error);
+    }
+
+    // If content script fails, try DOM extraction
+    const dom = await chrome.tabs.sendMessage(tab.id, { action: "getPageDOM" });
+    if (dom) {
+        // Try to extract the episode number from the active episode in the DOM
+        const activeEpisodeMatch = dom.match(/<a[^>]*class="[^"]*ep-item[^"]*active[^"]*"[^>]*data-number="(\d+)"[^>]*/);
+        if (activeEpisodeMatch && activeEpisodeMatch[1]) {
+            const episodeNumber = activeEpisodeMatch[1];
+            
+            // Get the clean anime title from URL extractor
+            const urlExtracted = extractFromUrl(tab.url);
+            const animeTitle = urlExtracted.animeTitle;
+            
+            if (animeTitle && episodeNumber) {
+                console.log('Extracted from AniWatchTV DOM:', { animeTitle, episodeNumber });
+                return {
+                    animeTitle,
+                    episodeNumber,
+                    url: tab.url
+                };
+            }
+        }
+    }
+    
+    // If both content script and DOM extraction fail, try URL parameters
+    const urlParts = new URL(tab.url);
+    const episodeParam = urlParts.searchParams.get('ep');
+    const epNumParam = urlParts.searchParams.get('epnum'); // Some URLs use this format
+    
+    if (episodeParam || epNumParam) {
+        // Get the clean anime title from URL extractor
+        const urlExtracted = extractFromUrl(tab.url);
+        const animeTitle = urlExtracted.animeTitle;
+        const episodeNumber = epNumParam || episodeParam;
+        
+        if (animeTitle && episodeNumber) {
+            console.log('Extracted from AniWatchTV URL params:', { animeTitle, episodeNumber });
+            return {
+                animeTitle,
+                episodeNumber,
+                url: tab.url
+            };
+        }
+    }
+    
+    // If all methods fail, return null values
+    console.error('Failed to extract episode info from AniWatchTV');
+    return {
+        animeTitle: null,
+        episodeNumber: null,
+        url: tab.url
+    };
+}
             } catch (error) {
                 console.error('Error in content script extraction:', error);
                 return;
@@ -125,12 +216,69 @@ async function saveToAnimeGroup(tabOrUrl, isNextEpisode = false) {
         const fullTitle = `${baseAnimeTitle} Episode ${episodeNumber}`;
         const dateAdded = new Date().toISOString();
 
-        await saveAnimeEpisode(animeTitle, { 
-            title: `${animeTitle} Episode ${episodeNumber}`, 
+        let domContent = null;
+        if (tabOrUrl.id) {
+            try {
+                domContent = await chrome.tabs.sendMessage(tabOrUrl.id, { action: "getPageDOM" });
+            } catch (error) {
+                console.error('Error getting DOM content from tab:', error);
+            }
+        } else {
+            // For URLs, fetch the content
+            domContent = await getDomContent(url);
+        }
+        
+        // Extract image URL if possible
+        let coverImageUrl = null;
+        let isLastEpisode = false;
+        const isAniWatchTV = url.includes('aniwatchtv.to');
+
+        if (domContent) {
+            // Use the statically imported function instead of dynamic import
+            coverImageUrl = extractImageUrl(url, domContent, baseAnimeTitle);
+            if(isAniWatchTV){
+            const hasNextEpisode = domContent.includes('data-number="' + (parseInt(episodeNumber) + 1) + '"');
+
+            isLastEpisode = !hasNextEpisode;
+            console.log('Is last episode:', isLastEpisode); // Add this log
+
+            }
+        }
+
+                if (!isAniWatchTV) {
+        await saveAnimeEpisode(baseAnimeTitle, { 
+            title: fullTitle, 
             episode: episodeNumber, 
             url, 
-            dateAdded: new Date().toISOString()
+            dateAdded,
+            coverImageUrl // Store the extracted image URL
         });
+    }else{
+        await saveAnimeEpisode(baseAnimeTitle, { 
+            title: fullTitle, 
+            episode: episodeNumber, 
+            url, 
+            dateAdded,
+            coverImageUrl,
+            nextEpisodeAvailable: !isLastEpisode, // Set this based on isLastEpisode
+            episodeAfterNextAvailable: !isLastEpisode,
+
+            isLastEpisode: isLastEpisode
+        });
+
+        // Store the availability status
+        chrome.storage.local.set({
+            [`nextEpisodeAvailable_${baseAnimeTitle}_${episodeNumber}`]: { 
+                isAvailable: !isLastEpisode, // Set this based on isLastEpisode
+                isLastEpisode: isLastEpisode,
+                lastChecked: Date.now() 
+            },
+            [`episodeAfterNextAvailable_${baseAnimeTitle}_${episodeNumber}`]: {
+                isAvailable: !isLastEpisode, // Also set this
+                lastChecked: Date.now()
+            }
+        });
+    }
 
         console.log('Episode saved successfully');
     } catch (error) {
@@ -242,16 +390,62 @@ function saveAnimeEpisode(groupName, episodeData) {
         });
     });
 }
-function checkEpisodeAvailability(url, callback) {
-    fetch(url, { method: 'HEAD' })
-      .then(response => {
-        callback(response.ok);
-      })
-      .catch(() => {
-        callback(false);
-      });
-}
 
+async function checkEpisodeAvailability(url, callback) {
+    // Special handling for aniwatchtv.to URLs
+    if (url.includes('aniwatchtv.to')) {
+        // For aniwatchtv.to, we'll skip availability checking
+        console.log('Skipping availability check for aniwatchtv.to URL');
+        callback(false);
+        return;
+    }
+    // Use full GET request instead of HEAD to detect redirects
+    fetch(url, { 
+        method: 'GET',
+        redirect: 'follow' // Explicitly follow redirects
+    })
+    .then(response => {
+        if (!response.ok) {
+            callback(false);
+            return;
+        }
+        
+        // Check if we were redirected to a different path
+        const responseUrl = new URL(response.url);
+        const originalUrl = new URL(url);
+        
+        // Consider episode available only if:
+        // 1. Response is OK (200-299)
+        // 2. We're still on the same path or a valid episode path
+        // 3. Not redirected to home page, root or error page
+        const isValidPath = responseUrl.pathname.includes('-episode-') || 
+                           responseUrl.pathname.includes('حلقة-');
+        const isSamePath = responseUrl.pathname === originalUrl.pathname;
+        const isHomePage = responseUrl.pathname === '/' || 
+                          responseUrl.pathname === '/index.html' ||
+                          responseUrl.pathname.endsWith('/404') ||
+                          responseUrl.pathname.endsWith('/error');
+        
+        const isAvailable = response.ok && (isSamePath || isValidPath) && !isHomePage;
+        
+        // For debugging
+        console.log('Episode availability check:', {
+            originalUrl: url,
+            finalUrl: response.url,
+            redirected: response.redirected,
+            isValidPath,
+            isSamePath,
+            isHomePage,
+            isAvailable
+        });
+        
+        callback(isAvailable);
+    })
+    .catch((error) => {
+        console.error('Error checking episode availability:', error);
+        callback(false);
+    });
+}
 function splitIntoChunks(array) {
     const chunks = [];
     let currentChunk = [];
@@ -444,8 +638,22 @@ function scheduleNextEpisodeCheck() {
 
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     if (request.action === 'saveEpisode') {
+        const now = Date.now();
+        const urlWithoutFragment = request.episodeUrl.split('#')[0];
+        
+        // Check if we recently tried to save this URL
+        if (recentlySavedUrls.has(urlWithoutFragment)) {
+            const lastSaveTime = recentlySavedUrls.get(urlWithoutFragment);
+            if (now - lastSaveTime < 10000) { // 10-second cooldown
+                console.log('Recently attempted to save this URL. Responding success to prevent refresh loop.');
+                sendResponse({success: true});
+                return true;
+            }
+        }
+        
         chrome.storage.sync.get({ autoSave: true, saveNext: false, delayTime: 5 }, function(settings) {
             if (settings.autoSave) {
+                recentlySavedUrls.set(urlWithoutFragment, now);
                 if (settings.saveNext) {
                     const saveFunction = () => saveToAnimeGroup(request.episodeUrl, true);
                     if (settings.delayTime) {
@@ -463,6 +671,10 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
         clearStorage();
         sendResponse({success: true});
     }else if (request.action === 'checkNextEpisode') {
+        if (request.nextEpisodeUrl.includes('aniwatchtv.to')) {
+            sendResponse({ isAvailable: false });
+            return true;
+        }
         checkEpisodeAvailability(request.nextEpisodeUrl, (isAvailable) => {
             chrome.storage.local.set({
                 [`nextEpisodeAvailable_${request.groupName}_${request.episodeNumber}`]: { 

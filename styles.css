@@ -235,34 +235,46 @@ main {
   gap: 3px;
   margin-top: 0.25rem;
 }
-
+.episode-links a {
+  grid-column: auto;
+}
 .anime-card a {
   text-decoration: none;
   font-size: 0.7rem;
-  padding: 4px 3px;
+  padding: 5px 10px;
   margin: 0;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
+  border-radius: 4px;
   transition: background-color 0.2s, color 0.2s;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
+/* When a link is missing, maintain the grid structure */
+.episode-links:empty::before {
+  content: "";
+  grid-column: span 3;
+}
 .prev-episode-link {
+  grid-column: 1 / 2; /* Start at 1, end at 2 */
+  grid-row: 1;
   background-color: var(--primary-light);
   color: var(--text-dark);
 }
 
 .watch-link {
+  grid-column: 2 / 3; /* Start at 2, end at 3 */
+  grid-row: 1;
   background-color: var(--primary-color);
   color: var(--text-dark);
 }
 
 .next-episode-link {
+  grid-column: 3 / 4; /* Start at 3, end at 4 */  
+  grid-row: 1;
   background-color: var(--secondary-color);
   color: var(--text-light);
 }
@@ -478,6 +490,8 @@ body.dark-mode .anime-card {
 
 body.dark-mode .anime-card a:hover {
   background-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-dark) !important;
+
 }
 
 body.dark-mode .prev-episode-link,
@@ -551,6 +565,9 @@ body.dark-mode #clearStorage:hover {
   background-color: #ff1a1a;
 }
 body.dark-mode h3 {
+  color: var(--text-dark);
+}
+body.dark-mode p {
   color: var(--text-dark);
 }
 body.dark-mode span {
@@ -635,6 +652,80 @@ body.dark-mode span {
   margin: 10px 0;
 }
 
+.filter-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-button {
+  background-color: var(--primary-dark);
+  border: 2px solid transparent;
+  color: white;
+  padding: 8px 12px;
+  text-align: center;
+  text-decoration: none;
+  font-size: 0.875rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1;
+  position: relative;
+}
+.filter-button.active {
+  background-color: var(--secondary-color);
+  color: var(--text-light);
+  font-weight: 600;
+  border: 2px solid var(--primary-dark);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transform: translateY(-2px);
+}
+.filter-button.active::after {
+  content: "";
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  background-color: var(--primary-color);
+  border-radius: 50%;
+}
+
+
+.filter-button:hover {
+  background-color: var(--primary-light);
+  transform: scale(1.03);
+}
+.count-badge {
+  display: inline-block;
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 0.75em;
+  margin-left: 6px;
+  font-weight: normal;
+}
+.filter-button.active .count-badge {
+  background-color: rgba(0, 0, 0, 0.2);
+  font-weight: bold;
+}
+body.dark-mode .count-badge {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+body.dark-mode .filter-button {
+  color: var(--text-dark);
+}
+
+body.dark-mode .filter-button.active {
+  background-color: var(--secondary-color);
+  color: var(--text-light);
+}
+
+/* Remove the old select styles since we're replacing it */
+#filterSelect {
+  display: none;
+}
 .loading-overlay {
   position: fixed;
   top: 0;
@@ -678,4 +769,87 @@ body.dark-mode .loading-overlay {
 body.dark-mode .loading-spinner {
   border-color: #333;
   border-top-color: var(--primary-light);
+}
+#guideButton {
+  background-color: var(--secondary-color);
+  color: var(--text-dark);
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.2s;
+}
+
+#guideButton:hover {
+  background-color: var(--primary-light);
+  transform: scale(1.1);
+}
+#guideModal {
+  position: fixed;
+  z-index: 1001;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0,0,0,0.4);
+}
+
+#guideModal .modal-content {
+  position: relative;
+  background-color: var(--card-light);
+  margin: 5% auto;
+  padding: 30px;
+  border: 1px solid #888;
+  width: 90%;
+  max-width: 550px;
+  border-radius: 8px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+#guideModal h2 {
+  margin-bottom: 20px;
+  color: var(--primary-color);
+}
+
+#guideModal p {
+  margin-bottom: 15px;
+  line-height: 1.5;
+}
+
+#guideModal ol {
+  padding-left: 20px;
+  margin-bottom: 20px;
+}
+
+#guideModal li {
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+#guideModal #closeGuideButton {
+  display: block;
+  margin: 20px auto 0;
+  padding: 10px 20px;
+  background-color: var(--primary-color);
+  color: var(--text-dark);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+#guideModal #closeGuideButton:hover {
+  background-color: var(--primary-light);
+}
+
+body.dark-mode #guideModal .modal-content {
+  background-color: var(--card-dark);
+  color: var(--text-dark);
+}
+
+body.dark-mode #guideModal h2 {
+  color: var(--secondary-color);
 }

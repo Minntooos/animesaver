@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Anime Saver",
-  "version": "1.5.1",
-  "description": "Save anime episodes to groups in Opera GX.",
+  "version": "1.5.2",
+  "description": "Save anime episodes to groups",
   "permissions": [
     "contextMenus",
     "storage",
@@ -10,7 +10,8 @@
     "tabs",
     "activeTab",
     "downloads",
-    "scripting"
+    "scripting",
+    "webRequest"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -40,6 +41,7 @@
         "extractors/urlExtractor.js",
         "extractors/domExtractor.js",
         "extractors/customExtractor.js",
+        "extractors/imageExtractor.js",
         "privacy_policy.html"
       ],
       "matches": ["<all_urls>"]
