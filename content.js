@@ -114,7 +114,20 @@ function extractEpisodeInfo() {
             };
         }
     }
-
+    if (window.location.href.includes('9animetv.to')) {
+        const activeEpisode = document.querySelector('.block_area-detail .film-name.active');              if (activeEpisode) {
+                  const episodeNumber = activeEpisode.getAttribute('data-number'); // Ensure this is correct
+                   const episodeTitle = activeEpisode.getAttribute('title') || activeEpisode.textContent;
+                   const animeTitle = activeEpisode.dataset.jname || activeEpisode.textContent;
+                    
+                     return {
+                        animeTitle: animeTitle.replace(/-episode-\d+.*$/i, '').trim(),
+                      episodeNumber: episodeNumber, // Ensure this is extracted correctly
+                     episodeTitle: episodeTitle,
+                        url: window.location.href
+                  };
+             }
+          }
     // Check for GoGoAnime-style elements
     const episodesSection = document.querySelector('.block_area.block_area-episodes');
     if (episodesSection) {

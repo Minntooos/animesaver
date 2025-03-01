@@ -31,6 +31,18 @@ export default function extractImageUrl(url, domContent, animeName) {
                 console.log('Extracted image URL from aniwatchtv.to:', imgMatch[1]);
                 return imgMatch[1];
             }
+        } else if (domain.includes('9animetv.to')) {
+            const imgMatch = domContent.match(/<div class="film-poster">\s*<img src="([^"]+)" class="film-poster-img"/);
+            if (imgMatch && imgMatch[1]) {
+                console.log('Extracted image URL from 9animetv.to:', imgMatch[1]);
+                return imgMatch[1];
+            }
+        }    else if (domain.includes('animeslayer.art')) {
+            const imgMatch = domContent.match(/<div class="thumb">\s*<a href="[^"]*"><img[^>]*src="([^"]+)"[^>]*alt="[^"]*"/);
+            if (imgMatch && imgMatch[1]) {
+                console.log('Extracted image URL from animeslayer.art:', imgMatch[1]);
+                return imgMatch[1];
+            }
         }
         
         // Add more site-specific extractors here as needed

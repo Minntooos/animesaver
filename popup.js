@@ -397,7 +397,7 @@ function extractAnimeName(title, url) {
     if (url) {
         const urlParts = url.split('/');
         const lastPart = urlParts[urlParts.length - 1];
-        animeName = lastPart.split('-episode-')[0];
+        animeName = animeName.replace(/-episode-\d+.*$/i, '').trim(); // Clean up the title for display
         if (animeName) {
             return animeName; // URL already has hyphens, so we can return it as is
         }
@@ -716,12 +716,24 @@ function applyFilter() {
 
 
 function updateNextEpisodeLink(isAvailable, nextEpisodeUrl, placeholder) {
+      // Get the card and episode data
+      const card = placeholder.closest('.anime-card');
+      if (!card) return;
+  
+      let episodeData;
+      try {
+          episodeData = JSON.parse(card.dataset.episode);
+      } catch (error) {
+          console.error('Error parsing episode data:', error);
+          return;
+      }
         // Don't create next episode link if we're on aniwatchtv.to and it's the last episode
-        if (nextEpisodeUrl && nextEpisodeUrl.includes('aniwatchtv.to') && 
-        placeholder.parentElement.querySelector('.anime-card')?.dataset.episode?.isLastEpisode) {
-        return;
-    }
-    if (isAvailable) {
+        if (nextEpisodeUrl.includes('aniwatchtv.to')) {
+            isAvailable = episodeData.nextEpisodeAvailable;
+            console.log('AniWatchTV next episode availability:', isAvailable);
+        }
+    
+    if (isAvailable && !episodeData.isLastEpisode) {
         const nextEpisodeLink = document.createElement('a');
         nextEpisodeLink.href = nextEpisodeUrl;
         nextEpisodeLink.textContent = 'Next';

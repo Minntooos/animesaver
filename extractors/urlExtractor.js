@@ -10,7 +10,7 @@ export default function extractFromUrl(url) {
 
         let animeTitle, episodeNumber;
   // AniWatchTV.to specific extraction
-  if (url.includes('aniwatchtv.to')) {
+  if (url.includes('aniwatchtv.to') || url.includes('9animetv.to')) {
     // For URLs like: /watch/im-a-noble-on-the-brink-of-ruin-so-i-might-as-well-try-mastering-magic-19458
     if (pathSegments.includes('watch') && pathSegments.length > 1) {
         const animePathSegment = pathSegments[pathSegments.indexOf('watch') + 1];
@@ -18,10 +18,14 @@ export default function extractFromUrl(url) {
         animeTitle = animePathSegment
         .split('?')[0]  // Remove query parameters
         .replace(/-\d+$/, '')  // Remove the ID number at the end
-        .replace(/[0-9]/g, '')  // Remove any remaining numbers
-        .replace(/-+/g, ' ')  // Replace hyphens with spaces
+        .replace(/-+/g, ' ')    // Remove any remaining numbers
+        .replace(/\s+/g, ' ')  // Replace hyphens with spaces
         .trim();  // Clean up extra spaces
+        if (url.includes('9animetv.to')) {
+           console.log('9animetv URL extracted title:', animeTitle);
+        }else{
             console.log('AniWatchTV URL extracted title:', animeTitle);
+        }
         
         // We cannot extract episode number from URL reliably
         // Will depend on DOM extraction for this

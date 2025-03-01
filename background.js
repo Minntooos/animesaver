@@ -88,8 +88,6 @@ async function saveToAnimeGroup(tabOrUrl, isNextEpisode = false) {
 
         console.log('Attempting to save URL:', url);
   // Protection against repeated save attempts
-  if (url.includes('aniwatchtv.to')) {
-
   const now = Date.now();
   const urlWithoutFragment = url.split('#')[0];
   if (recentlySavedUrls.has(urlWithoutFragment)) {
@@ -107,7 +105,6 @@ async function saveToAnimeGroup(tabOrUrl, isNextEpisode = false) {
           recentlySavedUrls.delete(savedUrl);
       }
   }
-}
         let animeTitle, episodeNumber;
 
         // Try URL extractor first
@@ -234,51 +231,59 @@ async function saveToAnimeGroup(tabOrUrl, isNextEpisode = false) {
         const isAniWatchTV = url.includes('aniwatchtv.to');
 
         if (domContent) {
-            // Use the statically imported function instead of dynamic import
             coverImageUrl = extractImageUrl(url, domContent, baseAnimeTitle);
-            if(isAniWatchTV){
-            const hasNextEpisode = domContent.includes('data-number="' + (parseInt(episodeNumber) + 1) + '"');
+            if (isAniWatchTV) {
+                // Check for next episode availability
+                const currentEpNumber = parseInt(episodeNumber);
+                const nextEpNumber = currentEpNumber + 1;
+                const hasNextEpisode = domContent.includes(`data-number="${nextEpNumber}"`);
+                const hasEpisodeAfterNext = domContent.includes(`data-number="${nextEpNumber + 1}"`);
+                
+                isLastEpisode = !hasNextEpisode;
+                console.log('Episode availability check:', {
+                    current: currentEpNumber,
+                    hasNext: hasNextEpisode,
+                    hasAfterNext: hasEpisodeAfterNext,
+                    isLast: isLastEpisode
+                });
 
-            isLastEpisode = !hasNextEpisode;
-            console.log('Is last episode:', isLastEpisode); // Add this log
+                // Save episode with availability information
+                await saveAnimeEpisode(baseAnimeTitle, { 
+                    title: fullTitle, 
+                    episode: episodeNumber, 
+                    url, 
+                    dateAdded,
+                    coverImageUrl,
+                    nextEpisodeAvailable: hasNextEpisode,
+                    episodeAfterNextAvailable: hasEpisodeAfterNext,
+                    isLastEpisode: isLastEpisode
+                });
 
+                // Store availability in local storage
+                chrome.storage.local.set({
+                    [`nextEpisodeAvailable_${baseAnimeTitle}_${episodeNumber}`]: { 
+                        isAvailable: hasNextEpisode,
+                        isLastEpisode: isLastEpisode,
+                        lastChecked: Date.now() 
+                    },
+                    [`episodeAfterNextAvailable_${baseAnimeTitle}_${episodeNumber}`]: {
+                        isAvailable: hasEpisodeAfterNext,
+                        lastChecked: Date.now()
+                    }
+                });
+            } else {
+                // Non-aniwatchtv.to sites
+                await saveAnimeEpisode(baseAnimeTitle, { 
+                    title: fullTitle, 
+                    episode: episodeNumber, 
+                    url, 
+                    dateAdded,
+                    coverImageUrl,
+                    nextEpisodeAvailable: true, // Default to true for non-aniwatchtv sites
+                    episodeAfterNextAvailable: true
+                });
             }
         }
-
-                if (!isAniWatchTV) {
-        await saveAnimeEpisode(baseAnimeTitle, { 
-            title: fullTitle, 
-            episode: episodeNumber, 
-            url, 
-            dateAdded,
-            coverImageUrl // Store the extracted image URL
-        });
-    }else{
-        await saveAnimeEpisode(baseAnimeTitle, { 
-            title: fullTitle, 
-            episode: episodeNumber, 
-            url, 
-            dateAdded,
-            coverImageUrl,
-            nextEpisodeAvailable: !isLastEpisode, // Set this based on isLastEpisode
-            episodeAfterNextAvailable: !isLastEpisode,
-
-            isLastEpisode: isLastEpisode
-        });
-
-        // Store the availability status
-        chrome.storage.local.set({
-            [`nextEpisodeAvailable_${baseAnimeTitle}_${episodeNumber}`]: { 
-                isAvailable: !isLastEpisode, // Set this based on isLastEpisode
-                isLastEpisode: isLastEpisode,
-                lastChecked: Date.now() 
-            },
-            [`episodeAfterNextAvailable_${baseAnimeTitle}_${episodeNumber}`]: {
-                isAvailable: !isLastEpisode, // Also set this
-                lastChecked: Date.now()
-            }
-        });
-    }
 
         console.log('Episode saved successfully');
     } catch (error) {
@@ -292,13 +297,10 @@ function saveAnimeEpisode(groupName, episodeData) {
             let group = null;
             
             // Remove episode number and Arabic word from groupName
-            const cleanedGroupName = groupName.replace(/(-episode-\d+|\d+-حلقة)$/i, '');
-            
+            const cleanedGroupName = groupName.replace(/(-episode-\d+|\d+-حلقة)$/i, '');            
             // Ensure groupName uses hyphens
-            const hyphenatedGroupName = cleanedGroupName.replace(/\s+/g, '-');
-            
+            const hyphenatedGroupName = cleanedGroupName.replace(/\s+/g, '-');          
             console.log("Cleaned group name:", hyphenatedGroupName);
-
             const chunkKey = `${hyphenatedGroupName}_chunk_0`;
             const infoKey = `${hyphenatedGroupName}_info`;
 

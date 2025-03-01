@@ -23,8 +23,7 @@ export function removeEpisodeNumber(fullAnimeTitle) {
         animeTitle = fullAnimeTitle.replace(/-episode-\d+.*$/i, '').replace(/-/g, ' ').trim();
     }
 
-    return { animeTitle, episodeNumber };
-}
+return { animeTitle: animeTitle.replace(/-episode-\d+.*$/i, '').trim(), episodeNumber };}
 export function extractEpisodeInfo(url, domContent) {
     const extractors = [urlExtractor, domExtractor, customExtractor];
     for (const extractor of extractors) {
