@@ -656,9 +656,17 @@ body.dark-mode span {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center; /* Align filter and sort buttons vertically */
 }
 
-.filter-button {
+.filter-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-grow: 1; /* Allow filter buttons to take available space */
+}
+
+.filter-button, .sort-button {
   background-color: var(--primary-dark);
   border: 2px solid transparent;
   color: white;
@@ -669,34 +677,62 @@ body.dark-mode span {
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
-  flex: 1;
   position: relative;
 }
-.filter-button.active {
-  background-color: var(--secondary-color);
-  color: var(--text-light);
+
+.filter-button {
+ flex: 1; /* Make filter buttons flexible */
+}
+
+.sort-buttons {
+  display: flex;
+  gap: 8px;
+  margin-left: auto; /* Push sort buttons to the right */
+}
+
+.sort-button {
+  padding: 8px 12px;
+  text-align: center;
+  text-decoration: none;
+  font-size: 0.875rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  color: white;
+}
+
+.filter-button.active, .sort-button.active {
+  background-color: var(--secondary-color) !important; /* Use important to override base */
+  color: var(--text-light) !important;
   font-weight: 600;
-  border: 2px solid var(--primary-dark);
+  border: 2px solid var(--primary-dark) !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   transform: translateY(-2px);
 }
-.filter-button.active::after {
+
+.filter-button.active::after, .sort-button.active::after {
   content: "";
   position: absolute;
-  bottom: -5px;
+  bottom: -5px; /* Adjust position if needed */
   left: 50%;
   transform: translateX(-50%);
-  width: 6px;
-  height: 6px;
+  width: 6px; /* Adjust size if needed */
+  height: 6px; /* Adjust size if needed */
   background-color: var(--primary-color);
   border-radius: 50%;
 }
 
 
-.filter-button:hover {
+.filter-button:hover, .sort-button:hover {
   background-color: var(--primary-light);
   transform: scale(1.03);
 }
+
+.sort-button:not(.active):hover {
+  transform: translateY(-1px) scale(1.03); /* Slight lift on hover */
+}
+
 .count-badge {
   display: inline-block;
   background-color: rgba(0, 0, 0, 0.1);
@@ -717,9 +753,15 @@ body.dark-mode .filter-button {
   color: var(--text-dark);
 }
 
-body.dark-mode .filter-button.active {
-  background-color: var(--secondary-color);
-  color: var(--text-light);
+body.dark-mode .filter-button.active,
+body.dark-mode .sort-button.active {
+  background-color: var(--secondary-color) !important;
+  color: var(--text-light) !important;
+  border-color: var(--primary-light) !important;
+}
+
+body.dark-mode .sort-button {
+  color: var(--text-dark);
 }
 
 /* Remove the old select styles since we're replacing it */
