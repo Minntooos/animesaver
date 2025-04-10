@@ -28,7 +28,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const sortNewestButton = document.getElementById('sortNewest');
     const sortOldestButton = document.getElementById('sortOldest');
     const guideButton = document.getElementById('guideButton');
+    const historyButton = document.getElementById('historyButton'); // Added history button ref
+    const historyModal = document.getElementById('historyModal'); // Added history modal ref
+    const closeHistoryButton = document.getElementById('closeHistoryButton'); // Added history close button ref
+
     guideButton.addEventListener('click', openGuideModal);
+    historyButton.addEventListener('click', openHistoryModal); // Added listener for history button
+    closeHistoryButton.addEventListener('click', () => closeModal('historyModal')); // Added listener for history close button
 
     // currentSortOrder is now defined globally
 
@@ -69,8 +75,12 @@ document.addEventListener('DOMContentLoaded', function () {
         if (event.target === settingsModal) {
             closeModal('settingsModal');
         }
+        // Also close history modal on outside click
+        if (event.target === historyModal) {
+            closeModal('historyModal');
+        }
     });
-    const closeButton = document.getElementById('close-button');
+    const closeButton = document.getElementById('close-button'); // Settings modal close button
     closeButton.addEventListener('click', () => {
         closeModal('settingsModal');
     }); 
@@ -82,11 +92,20 @@ document.addEventListener('DOMContentLoaded', function () {
     loadSettings(); // This calls loadAnimeGroups indirectly after applying settings
     loadAlphabetButtons();
     // Initial load is handled by loadSettings -> applySettings -> loadAnimeGroups
-    // Set initial active sort button after initial load completes
-    loadAnimeGroups().then(() => {
-        updateAnimeCount();
-        document.getElementById('sortNewest').classList.add('active'); // Set default active sort button
-        sortDisplayedCards(); // Apply initial sort
+    // loadAnimeGroups is called within loadSettings -> applySettings
+    // Set initial active sort button after initial load completes (moved inside loadAnimeGroups or called after it finishes)
+    // Removed the problematic .then() call here as loadAnimeGroups no longer returns a Promise
+    // The necessary updates (updateAnimeCount, sortDisplayedCards) are called at the end of loadAnimeGroups.
+    // We still need to set the default active sort button after the initial load.
+    // Let's ensure loadSettings triggers the load and then we set the button.
+    // The loadSettings -> applySettings -> loadAnimeGroups chain handles the initial load.
+    // We can set the default sort button after loadSettings completes.
+    chrome.storage.sync.get(['cardSize'], function(items) { // Assuming loadSettings finished
+        // This might run too early. A better approach might be needed if timing is an issue.
+        // For now, let's assume loadAnimeGroups called by loadSettings finishes before this.
+         if (!document.querySelector('.sort-button.active')) { // Only set if no button is active yet
+            document.getElementById('sortNewest').classList.add('active');
+         }
     });
 });
 
@@ -104,10 +123,10 @@ function handleFilterButtonClick(event) {
     const filterValue = event.target.dataset.filter;
     
     // Apply the filter
-    const currentLetter = document.querySelector('#alphabetList button.active').dataset.letter;
-    loadAnimeGroups(currentLetter, filterValue).then(() => {
-        updateAnimeCount();
-    });
+    const currentLetter = document.querySelector('#alphabetList button.active')?.dataset.letter || 'All'; // Added fallback
+    // Removed date filter preservation
+    loadAnimeGroups(currentLetter, filterValue);
+    // updateAnimeCount and sortDisplayedCards are called within loadAnimeGroups now
 }
 
 // Function to handle sort button clicks
@@ -381,27 +400,32 @@ function shouldDisplayEpisode(episode, filter) {
             return true;
     }
 }
+// Modified loadAnimeGroups: Removed Promise structure as it's not strictly needed here
+// and was causing issues with the resolveCard parameter in createCard.
+// Removed startDate and endDate parameters
 function loadAnimeGroups(filterLetter = 'All', filter = 'all') {
-    return new Promise((resolveLoadGroups) => {
-        console.log('Loading anime groups with filter:', filter);
-        chrome.storage.sync.get(null, function(data) {
-            const animeCardsContainer = document.getElementById('animeCards');
-            animeCardsContainer.innerHTML = ''; // Clear previous cards
+    console.log('Loading anime groups with filter:', filter, 'letter:', filterLetter);
+    chrome.storage.sync.get(null, function(data) {
+        const animeCardsContainer = document.getElementById('animeCards');
+        animeCardsContainer.innerHTML = ''; // Clear previous cards
 
-            let cardPromises = [];
+        // Corrected processGroup function definition placement
+        function processGroup(groupName, episodes) {
+            if (filterLetter === 'All' || groupName.charAt(0).toUpperCase() === filterLetter) {
+                episodes.forEach(episode => {
+                    // Removed Date Filtering Logic
 
-            function processGroup(groupName, episodes) {
-                if (filterLetter === 'All' || groupName.charAt(0).toUpperCase() === filterLetter) {
-                    episodes.forEach(episode => {
-                        const cardPromise = new Promise((resolve) => {
-                            const card = createCard(groupName, episode, resolve);
-                            card.episode = episode; // Store the episode data on the card element
-                            animeCardsContainer.appendChild(card);
-                        });
-                        cardPromises.push(cardPromise);
-                    });
-                }
-            }
+                    // Create card (no date filter check needed here)
+                    const card = createCard(groupName, episode);
+                    if (card) {
+                        card.episode = episode;
+                        animeCardsContainer.appendChild(card);
+                        // Apply status filter visibility *after* creating the card
+                        updateCardVisibility(card, episode, filter);
+                    }
+                }); // End forEach
+            } // End if
+        } // End processGroup function
 
             // Process new format (chunked data)
             for (let key in data) {
@@ -432,16 +456,113 @@ function loadAnimeGroups(filterLetter = 'All', filter = 'all') {
                     processGroup(key, data[key]);
                 }
             }
+        // } <-- Removed extra closing brace from previous incorrect edit
 
-            // Wait for all cards to be processed before resolving
-            Promise.all(cardPromises).then(() => {
-                updateAnimeCount();
-                sortDisplayedCards(); // Sort cards after loading/filtering
-                resolveLoadGroups();
+        // After processing all groups, update count and sort
+        updateAnimeCount();
+        sortDisplayedCards(); // Sort cards after loading/filtering
+        // Removed resolveLoadGroups() call
+        // Note: updateAnimeCount and sortDisplayedCards are called *after* iterating through all data
+    });
+    // Removed outer Promise return
+}
+
+// Function to open and populate the history modal
+function openHistoryModal() {
+    const historyEntriesContainer = document.getElementById('historyEntries');
+    historyEntriesContainer.innerHTML = '<p>Loading history...</p>'; // Show loading message
+
+    chrome.storage.sync.get(null, function(data) {
+        let allEpisodes = [];
+
+        // Consolidate episodes from all formats (similar to handleSearch consolidation)
+        const processedChunkGroups = new Set();
+        const settingKeys = new Set(['autoSave', 'saveNext', 'delayTime', 'darkMode', 'cardSize', 'activeFilter', 'animeGroups']);
+
+        for (const key in data) {
+            if (key.endsWith('_info')) {
+                const groupName = key.replace('_info', '');
+                if (settingKeys.has(groupName)) continue;
+                processedChunkGroups.add(groupName);
+                const info = data[key];
+                if (info && typeof info.chunks === 'number') {
+                    for (let i = 0; i < info.chunks; i++) {
+                        const chunkKey = `${groupName}_chunk_${i}`;
+                        if (data[chunkKey] && Array.isArray(data[chunkKey])) {
+                            // Add groupName to each episode for context
+                            data[chunkKey].forEach(ep => ep.groupName = groupName);
+                            allEpisodes = allEpisodes.concat(data[chunkKey]);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (data.animeGroups && typeof data.animeGroups === 'object') {
+            for (const groupName in data.animeGroups) {
+                if (!processedChunkGroups.has(groupName) && Array.isArray(data.animeGroups[groupName])) {
+                    data.animeGroups[groupName].forEach(ep => ep.groupName = groupName);
+                    allEpisodes = allEpisodes.concat(data.animeGroups[groupName]);
+                }
+            }
+        }
+
+        for (const key in data) {
+            if (settingKeys.has(key) || key.endsWith('_info') || key.includes('_chunk_') || processedChunkGroups.has(key) || key === 'animeGroups') {
+                continue;
+            }
+            if (Array.isArray(data[key]) && data[key].length > 0) {
+                 // Check if these episodes were already added via another format (less likely now but safe)
+                 const groupName = key;
+                 const episodesToAdd = data[key].filter(ep => !allEpisodes.some(existingEp => existingEp.url === ep.url));
+                 episodesToAdd.forEach(ep => ep.groupName = groupName);
+                 allEpisodes = allEpisodes.concat(episodesToAdd);
+            }
+        }
+
+        // Filter out any invalid entries and sort by dateAdded (newest first)
+        allEpisodes = allEpisodes.filter(ep => ep && ep.dateAdded && ep.title); // Ensure essential fields exist
+        allEpisodes.sort((a, b) => new Date(b.dateAdded) - new Date(a.dateAdded));
+
+        // Populate the modal
+        historyEntriesContainer.innerHTML = ''; // Clear loading message
+        if (allEpisodes.length === 0) {
+            historyEntriesContainer.innerHTML = '<p>No history found.</p>';
+        } else {
+            allEpisodes.forEach(episode => {
+                const entryDiv = document.createElement('div');
+                entryDiv.classList.add('history-entry');
+
+                const titleSpan = document.createElement('span');
+                titleSpan.classList.add('title');
+                // Attempt to display a cleaner title if possible
+                let displayTitle = episode.title.includes(`Episode ${episode.episode}`)
+                                   ? episode.title
+                                   : `${extractAnimeName(episode.title, episode.url).replace(/-/g, ' ')} Episode ${episode.episode}`;
+                titleSpan.textContent = displayTitle;
+                titleSpan.title = episode.title; // Show full title on hover
+
+                const dateSpan = document.createElement('span');
+                dateSpan.classList.add('date');
+                // Format date nicely
+                try {
+                   dateSpan.textContent = new Date(episode.dateAdded).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+                } catch (e) {
+                   dateSpan.textContent = 'Invalid Date';
+                }
+
+
+                entryDiv.appendChild(titleSpan);
+                entryDiv.appendChild(dateSpan);
+                historyEntriesContainer.appendChild(entryDiv);
             });
-        });
+        }
+
+        // Display the modal
+        historyModal.style.display = 'block';
     });
 }
+
 
 function extractAnimeName(title, url) {
     let animeName = '';
@@ -516,8 +637,8 @@ function generateEpisodeUrl(baseUrl, episodeNumber) {
     }
 }
 
-// Make resolveCard optional
-function createCard(groupName, episode, resolveCard = null) { 
+// Modified createCard: Removed resolveCard parameter entirely
+function createCard(groupName, episode) { 
     
     const card = document.createElement('div');
     card.classList.add('anime-card');
@@ -666,7 +787,7 @@ observer.observe(coverImage);
     if (episode.url.includes('aniwatchtv.to')) {
           // Don't create next episode link if this is marked as the last episode
           if (episode.isLastEpisode) {
-            resolveCard();
+            // Removed resolveCard() call
             return card;
         }
         const baseAnimeUrl = episode.url.split('?')[0];
@@ -703,10 +824,7 @@ observer.observe(coverImage);
                     // Update the card's dataset with the updated episode
                     card.dataset.episode = JSON.stringify(updatedEpisode);
                     updateCardVisibility(card, updatedEpisode, currentFilter);
-                    // Only call resolveCard if it's a function
-                    if (typeof resolveCard === 'function') {
-                        resolveCard();
-                    }
+                    // Removed resolveCard() call
                 });
             });
         } else {
@@ -721,10 +839,7 @@ observer.observe(coverImage);
             // Update the card's dataset with the updated episode
             card.dataset.episode = JSON.stringify(updatedEpisode);
             updateCardVisibility(card, updatedEpisode, currentFilter);
-            // Only call resolveCard if it's a function
-            if (typeof resolveCard === 'function') {
-                resolveCard();
-            }
+             // Removed resolveCard() call
         }
     });
 
@@ -931,10 +1046,11 @@ function handleFilter(letter) {
 
     // Get the current filter from active filter button
     const currentFilter = document.querySelector('.filter-button.active').dataset.filter;
+    // Removed date filter preservation
     
-    loadAnimeGroups(letter, currentFilter).then(() => {
-        updateAnimeCount();
-    });
+    // Load groups with letter and status filters
+    loadAnimeGroups(letter, currentFilter);
+     // updateAnimeCount and sortDisplayedCards are called within loadAnimeGroups now
 }
 
 function refreshAnimeData() {
@@ -1079,109 +1195,198 @@ function checkEpisodeAvailability(url, callback) {
 // Helper function to normalize names for searching (remove hyphens, collapse spaces)
 function normalizeSearchString(str) {
     if (!str) return '';
-    return str.toLowerCase().replace(/-/g, ' ').replace(/\s+/g, ' ').trim();
+    // Enhanced: Also remove colons and handle smart quotes explicitly
+    return str.toLowerCase()
+              .replace(/['’]/g, '') // Remove apostrophes (both types)
+              .replace(/[",.“”:]/g, '') // Remove quotes, periods/commas, colons, smart quotes
+              .replace(/-/g, ' ')      // Replace hyphens with spaces
+              .replace(/\s+/g, ' ')   // Collapse multiple spaces
+              .trim();
 }
 
 function handleSearch() {
-    // Normalize the search term itself
     const rawSearchTerm = document.getElementById('searchInput').value;
-    const normalizedSearchTerm = normalizeSearchString(rawSearchTerm); 
-    
+    const normalizedSearchTerm = normalizeSearchString(rawSearchTerm);
+    const animeCardsContainer = document.getElementById('animeCards');
+    animeCardsContainer.innerHTML = ''; // Clear previous cards
+
     chrome.storage.sync.get(null, function(data) {
-        const animeCardsContainer = document.getElementById('animeCards');
-        animeCardsContainer.innerHTML = ''; // Clear previous cards
-        let count = 0;
+        const animeData = {}; // Store episodes keyed by normalized group name
+        const settingKeys = new Set(['autoSave', 'saveNext', 'delayTime', 'darkMode', 'cardSize', 'activeFilter', 'animeGroups']); // Add any other non-anime keys
 
-        // This function processes a single group of episodes for search matches
-        function findMatchesInGroup(groupName, episodes) {
-            episodes.forEach(episode => {
-                // Normalize potential sources of the anime name from the stored data
-                const normalizedGroupName = normalizeSearchString(groupName);
-                const normalizedEpisodeTitle = normalizeSearchString(episode.title);
-                
-                // Derive the name like createCard does, then normalize it
-                const extractedNameForSearch = extractAnimeName(episode.title, episode.url);
-                const normalizedExtractedName = normalizeSearchString(extractedNameForSearch);
+        // --- Step 1: Consolidate all anime data ---
+        const processedChunkGroups = new Set(); // Track original group names handled by _info/_chunk logic
 
-                // Compare normalized search term against all normalized sources
-                if (normalizedSearchTerm && 
-                    (normalizedGroupName.includes(normalizedSearchTerm) || 
-                     normalizedEpisodeTitle.includes(normalizedSearchTerm) ||
-                     normalizedExtractedName.includes(normalizedSearchTerm))) 
-                {
-                    // Match found, create the card
-                    const card = createCard(groupName, episode); 
-                    animeCardsContainer.appendChild(card);
-                    count++;
-                }
-            }); 
-        } 
-
-        let processedKeys = new Set(); // Keep track of keys processed via chunks or animeGroups
-
-        // Process new format (chunked data)
-        for (let key in data) {
+        for (const key in data) {
             if (key.endsWith('_info')) {
                 const groupName = key.replace('_info', '');
-                processedKeys.add(groupName); // Mark group as processed (even if empty)
+                // Skip if groupName itself is a setting key (unlikely but safe)
+                if (settingKeys.has(groupName)) continue;
+
+                const normalizedGroupName = normalizeSearchString(groupName);
+                processedChunkGroups.add(groupName); // Mark original group name as handled by chunk logic
+
                 const info = data[key];
                 let groupEpisodes = [];
-                for (let i = 0; i < info.chunks; i++) {
-                    const chunkKey = `${groupName}_chunk_${i}`;
-                    if (data[chunkKey]) {
-                        groupEpisodes = groupEpisodes.concat(data[chunkKey]);
-                        processedKeys.add(chunkKey); // Mark chunk as processed
+                // Ensure info and info.chunks are valid before looping
+                if (info && typeof info.chunks === 'number') {
+                    for (let i = 0; i < info.chunks; i++) {
+                        const chunkKey = `${groupName}_chunk_${i}`;
+                        if (data[chunkKey] && Array.isArray(data[chunkKey])) {
+                            groupEpisodes = groupEpisodes.concat(data[chunkKey]);
+                        }
                     }
                 }
-                processedKeys.add(key); // Mark info key as processed
-                if (groupEpisodes.length > 0) { // Only process if episodes were found
-                   findMatchesInGroup(groupName, groupEpisodes); 
+
+                if (groupEpisodes.length > 0) {
+                    if (!animeData[normalizedGroupName]) {
+                        animeData[normalizedGroupName] = { episodes: [], originalNames: new Set() };
+                    }
+                    // Add episodes, ensuring they have minimum required fields (like url, title, episode)
+                    const validEpisodes = groupEpisodes.filter(ep => ep && ep.url && ep.title && ep.episode);
+                    animeData[normalizedGroupName].episodes.push(...validEpisodes);
+                    animeData[normalizedGroupName].originalNames.add(groupName);
                 }
             }
         }
 
-        // Process old format (animeGroups)
-        if (data.animeGroups) {
-            processedKeys.add('animeGroups'); // Mark animeGroups key itself as processed
-            for (let groupName in data.animeGroups) {
-                 if (!processedKeys.has(groupName)) { // Avoid re-processing if already handled by chunk logic
-                    findMatchesInGroup(groupName, data.animeGroups[groupName]);
-                    processedKeys.add(groupName); // Mark this specific groupName as processed
+        // Process old format (animeGroups) - add to consolidated data
+        if (data.animeGroups && typeof data.animeGroups === 'object') {
+            for (const groupName in data.animeGroups) {
+                // Avoid adding if already processed via chunks or if it's not an array
+                if (!processedChunkGroups.has(groupName) && Array.isArray(data.animeGroups[groupName])) {
+                     const normalizedGroupName = normalizeSearchString(groupName);
+                     if (!animeData[normalizedGroupName]) {
+                         animeData[normalizedGroupName] = { episodes: [], originalNames: new Set() };
+                     }
+                     const validEpisodes = data.animeGroups[groupName].filter(ep => ep && ep.url && ep.title && ep.episode);
+                     animeData[normalizedGroupName].episodes.push(...validEpisodes);
+                     animeData[normalizedGroupName].originalNames.add(groupName);
+                }
+            }
+        }
+
+        // Process remaining keys as potential single entries
+        for (const key in data) {
+            // Skip if it's a setting, an info/chunk key, handled by chunk logic, or the animeGroups container itself
+            if (settingKeys.has(key) || key.endsWith('_info') || key.includes('_chunk_') || processedChunkGroups.has(key) || key === 'animeGroups') {
+                continue;
+            }
+
+            // Check if it's a non-empty array (potential anime group)
+            if (Array.isArray(data[key]) && data[key].length > 0) {
+                const groupName = key;
+                const normalizedGroupName = normalizeSearchString(groupName);
+
+                 // If this normalized name wasn't added by chunks/animeGroups, add its episodes
+                 if (!animeData[normalizedGroupName]) {
+                     animeData[normalizedGroupName] = { episodes: [], originalNames: new Set() };
+                     const validEpisodes = data[key].filter(ep => ep && ep.url && ep.title && ep.episode);
+                     animeData[normalizedGroupName].episodes.push(...validEpisodes);
+                     animeData[normalizedGroupName].originalNames.add(groupName);
+                 } else {
+                     // If normalized name exists, check if this specific original key name was already added
+                     // This prevents adding the same data twice if e.g. "anime-x" (chunk) and "anime-x" (single) exist
+                     if (!animeData[normalizedGroupName].originalNames.has(groupName)) {
+                         const validEpisodes = data[key].filter(ep => ep && ep.url && ep.title && ep.episode);
+                         animeData[normalizedGroupName].episodes.push(...validEpisodes);
+                         animeData[normalizedGroupName].originalNames.add(groupName);
+                     }
                  }
             }
         }
 
-        // Process remaining single entries (ensure they weren't part of chunks/animeGroups)
-        for (let key in data) {
-            // Check if it's an array, not processed yet, and not a settings/internal key
-            if (Array.isArray(data[key]) && 
-                !processedKeys.has(key) && 
-                !key.endsWith('_info') && 
-                !key.includes('_chunk_') && 
-                !['autoSave', 'saveNext', 'delayTime', 'darkMode', 'cardSize', 'animeGroups'].includes(key)) 
-            {
-                findMatchesInGroup(key, data[key]);
-                // No need to add to processedKeys here as we iterate all remaining keys once
-            }
+        // --- Step 2: Search through consolidated data ---
+        let count = 0;
+        for (const normalizedGroupName in animeData) {
+            const groupData = animeData[normalizedGroupName];
+            // Deduplicate episodes within the group based on URL or title+episode as a fallback
+            const uniqueEpisodes = [];
+            const seenKeys = new Set();
+            groupData.episodes.forEach(episode => {
+                const key = episode.url || `${episode.title}_${episode.episode}`;
+                if (!seenKeys.has(key)) {
+                    uniqueEpisodes.push(episode);
+                    seenKeys.add(key);
+                }
+            });
+
+            // Use the first original name found for card creation consistency
+            const representativeOriginalName = groupData.originalNames.values().next().value || normalizedGroupName;
+
+            uniqueEpisodes.forEach(episode => {
+                // We already have the normalizedGroupName from the loop key
+                const normalizedEpisodeTitle = normalizeSearchString(episode.title);
+
+                // Get and normalize the extracted name (used for display/fallback)
+                let normalizedExtractedName = '';
+                 let extractedNameForDisplay = ''; // Keep original extracted name for card title if needed
+                try {
+                    // Use the representativeOriginalName for consistency if extracting from title later
+                    extractedNameForDisplay = extractAnimeName(episode.title, episode.url) || representativeOriginalName;
+                    // Normalize the name extracted for display/fallback for searching purposes
+                    normalizedExtractedName = normalizeSearchString(extractedNameForDisplay);
+                } catch (e) {
+                    console.warn(`Error extracting name for search/display: ${episode.title}`, e);
+                    // Fallback to normalized group name if extraction fails
+                    normalizedExtractedName = normalizedGroupName;
+                }
+
+                // Combine all normalized parts into one searchable string
+                const searchableText = `${normalizedGroupName} ${normalizedEpisodeTitle} ${normalizedExtractedName}`.trim();
+
+                 // --- Debug Logging ---
+                 if (representativeOriginalName.toLowerCase().includes('the-beginning-after-the-end')) {
+                    console.log(`--- Debug Search: The Beginning After the End ---`);
+                    console.log(`Search Term (Normalized): "${normalizedSearchTerm}"`);
+                    console.log(`Normalized Group Name: "${normalizedGroupName}"`);
+                    console.log(`Normalized Episode Title: "${normalizedEpisodeTitle}"`);
+                    console.log(`Normalized Extracted Name: "${normalizedExtractedName}"`);
+                    console.log(`Combined Searchable Text: "${searchableText}"`);
+                    console.log(`Match Found: ${normalizedSearchTerm && searchableText.includes(normalizedSearchTerm)}`);
+                    console.log(`-----------------------------------------------`);
+                }
+                 // --- End Debug Logging ---
+
+                // Perform search only if search term is not empty and a match is found in the combined text
+                if (normalizedSearchTerm && searchableText.includes(normalizedSearchTerm)) {
+                    // Use the representative original name for card creation
+                    const card = createCard(representativeOriginalName, episode);
+                     if (card) { // Ensure card creation succeeded
+                        animeCardsContainer.appendChild(card);
+                        count++;
+                    }
+                }
+            });
         }
 
-        // Update anime count display (using the count variable)
-        // Note: updateAnimeCount() might recount based on DOM, which is fine after cards are added.
-        updateAnimeCount(); 
-        if (count === 0 && normalizedSearchTerm) { // Show message only if a search was performed
+
+        // --- Step 3: Update UI ---
+        // If search term is empty, load all groups respecting current filters
+        if (!normalizedSearchTerm) {
+             const currentFilter = document.querySelector('.filter-button.active')?.dataset.filter || 'all';
+             const currentLetter = document.querySelector('#alphabetList button.active')?.dataset.letter || 'All';
+             // Removed date filter parameters
+             loadAnimeGroups(currentLetter, currentFilter);
+             return; // Exit early
+        }
+
+        // If search term is present, we've already added matching cards.
+        // Removed the secondary date filtering pass on search results.
+
+        updateAnimeCount(); // Update counts based on *visible* cards after search filtering
+        if (count === 0 && normalizedSearchTerm) { // Show message only if a search was performed and yielded no results
             const message = document.createElement('p');
             message.textContent = 'No anime episodes found matching your search.';
             message.style.textAlign = 'center';
             message.style.marginTop = '20px';
             animeCardsContainer.appendChild(message);
-        } else if (count === 0 && !normalizedSearchTerm) {
-             // If search is empty and still no cards, maybe show a generic empty message?
-             // Or rely on loadAnimeGroups to handle the initial empty state. Let's keep it simple for now.
         }
-        
         sortDisplayedCards(); // Sort the displayed search results
+
     }); // Close chrome.storage.sync.get callback
 }
+
 
 document.getElementById('clearStorage').addEventListener('click', () => {
     if (confirm('Warning: This will clear all anime data. Proceed?')) {

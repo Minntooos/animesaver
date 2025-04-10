@@ -895,3 +895,72 @@ body.dark-mode #guideModal .modal-content {
 body.dark-mode #guideModal h2 {
   color: var(--secondary-color);
 }
+
+/* History Modal Styles */
+#historyModal .modal-content {
+  max-width: 550px; /* Slightly wider for history entries */
+  max-height: 85vh; /* Allow more vertical space */
+}
+
+#historyModal h2 {
+  color: var(--primary-color);
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+#historyEntries {
+  max-height: 65vh; /* Limit height of the entries list */
+  overflow-y: auto; /* Add scrollbar if needed */
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
+  padding: 10px 0;
+}
+
+.history-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 5px;
+  border-bottom: 1px dashed #eee;
+  font-size: 0.9rem;
+}
+
+.history-entry:last-child {
+  border-bottom: none;
+}
+
+.history-entry .title {
+  flex-grow: 1;
+  margin-right: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-entry .date {
+  font-size: 0.8rem;
+  color: #666;
+  white-space: nowrap;
+}
+
+/* Dark Mode History Modal */
+body.dark-mode #historyModal .modal-content {
+  background-color: var(--card-dark);
+  color: var(--text-dark);
+}
+
+body.dark-mode #historyModal h2 {
+  color: var(--secondary-color);
+}
+
+body.dark-mode #historyEntries {
+  border-color: #444;
+}
+
+body.dark-mode .history-entry {
+  border-bottom-color: #444;
+}
+
+body.dark-mode .history-entry .date {
+  color: #aaa;
+}

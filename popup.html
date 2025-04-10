@@ -29,6 +29,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
     <div class="nav-controls">
       <button id="refresh" title="Refresh">&#x21bb;</button>
       <button id="loadFromFile" title="Load from File">&#x1f4be;</button>
+      <button id="historyButton" title="History">&#x1f553;</button> <!-- Added History Button -->
       <button id="guideButton" title="Guide">?</button>
       <button id="settings" title="Settings">&#x2699;</button>
       <input type="file" id="fileInput" accept=".json" style="display: none;">
@@ -110,6 +111,19 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 </div>
     </main>
   </div>
+
+  <!-- History Modal -->
+  <div id="historyModal" class="modal">
+    <div class="modal-content">
+      <span id="closeHistoryButton" class="close-button">&times;</span>
+      <h2>Episode History</h2>
+      <div id="historyEntries">
+        <!-- History entries will be populated here -->
+        <p>Loading history...</p>
+      </div>
+    </div>
+  </div>
+
   <a href="privacy_policy.html" target="_blank">Privacy Policy</a>
   <script src="popup.js" type="module"></script>
 </body>
